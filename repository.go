@@ -261,7 +261,7 @@ func PlainOpenWithOptions(path string, o *PlainOpenOptions) (*Repository, error)
 	if o.EnableDotGitCommonDir {
 		dotGitCommon, err := dotGitCommonDirectory(dot)
 		if err != nil {
-			return nil, fmt.Errorf("unable to open commondir for %s: %s", dot.Root(), err)
+			return nil, err
 		}
 		repositoryFs = dotgit.NewRepositoryFilesystem(dot, dotGitCommon)
 	} else {
