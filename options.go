@@ -577,6 +577,8 @@ type PlainOpenOptions struct {
 	// DetectDotGit defines whether parent directories should be
 	// walked until a .git directory or file is found.
 	DetectDotGit bool
+	// Enable .git/commondir support (see https://git-scm.com/docs/gitrepository-layout#Documentation/gitrepository-layout.txt)
+	EnableDotGitCommonDir bool
 }
 
 // Validate validates the fields and sets the default values.
