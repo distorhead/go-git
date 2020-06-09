@@ -12,9 +12,8 @@ import (
 // standard git format (this is, the .git directory). Zero values of this type
 // are not safe to use, see the NewStorage function below.
 type Storage struct {
-	fs       billy.Filesystem
-	commonfs billy.Filesystem
-	dir      *dotgit.DotGit
+	fs  billy.Filesystem
+	dir *dotgit.DotGit
 
 	ObjectStorage
 	ReferenceStorage
@@ -35,9 +34,6 @@ type Options struct {
 	// MaxOpenDescriptors is the max number of file descriptors to keep
 	// open. If KeepDescriptors is true, all file descriptors will remain open.
 	MaxOpenDescriptors int
-	// CommonDir sets the directory used for accessing non-worktree files that
-	// would normally be taken from the root directory.
-	Commonfs billy.Filesystem
 }
 
 // NewStorage returns a new Storage backed by a given `fs.Filesystem` and cache.
@@ -50,16 +46,12 @@ func NewStorage(fs billy.Filesystem, cache cache.Object) *Storage {
 func NewStorageWithOptions(fs billy.Filesystem, cache cache.Object, ops Options) *Storage {
 	dirOps := dotgit.Options{
 		ExclusiveAccess: ops.ExclusiveAccess,
-		KeepDescriptors: ops.KeepDescriptors,
-		CommonFs:        ops.Commonfs,
 	}
-
 	dir := dotgit.NewWithOptions(fs, dirOps)
 
 	return &Storage{
-		fs:       fs,
-		commonfs: ops.Commonfs,
-		dir:      dir,
+		fs:  fs,
+		dir: dir,
 
 		ObjectStorage:    *NewObjectStorageWithOptions(dir, cache, ops),
 		ReferenceStorage: ReferenceStorage{dir: dir},
@@ -73,12 +65,6 @@ func NewStorageWithOptions(fs billy.Filesystem, cache cache.Object, ops Options)
 // Filesystem returns the underlying filesystem
 func (s *Storage) Filesystem() billy.Filesystem {
 	return s.fs
-}
-
-// CommonFilesystem returns the underlying filesystem for the main
-// working-tree/common git directory
-func (s *Storage) CommonFilesystem() billy.Filesystem {
-	return s.commonfs
 }
 
 // Init initializes .git directory

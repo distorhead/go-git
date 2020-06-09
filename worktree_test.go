@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -209,7 +208,7 @@ func (s *WorktreeSuite) TestPullProgressWithRecursion(c *C) {
 
 	dir, err := ioutil.TempDir("", "plain-clone-submodule")
 	c.Assert(err, IsNil)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	r, _ := PlainInit(dir, false)
 	r.CreateRemote(&config.RemoteConfig{
@@ -362,7 +361,7 @@ func (s *WorktreeSuite) TestCheckoutSymlink(c *C) {
 
 	dir, err := ioutil.TempDir("", "checkout")
 	c.Assert(err, IsNil)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	r, err := PlainInit(dir, false)
 	c.Assert(err, IsNil)
@@ -530,7 +529,7 @@ func (s *WorktreeSuite) TestCheckoutIndexMem(c *C) {
 func (s *WorktreeSuite) TestCheckoutIndexOS(c *C) {
 	dir, err := ioutil.TempDir("", "checkout")
 	c.Assert(err, IsNil)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	fs := osfs.New(filepath.Join(dir, "worktree"))
 	w := &Worktree{
@@ -955,7 +954,7 @@ func (s *WorktreeSuite) TestStatusAfterCheckout(c *C) {
 func (s *WorktreeSuite) TestStatusModified(c *C) {
 	dir, err := ioutil.TempDir("", "status")
 	c.Assert(err, IsNil)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	fs := osfs.New(filepath.Join(dir, "worktree"))
 	w := &Worktree{
@@ -1049,7 +1048,7 @@ func (s *WorktreeSuite) TestStatusUntracked(c *C) {
 func (s *WorktreeSuite) TestStatusDeleted(c *C) {
 	dir, err := ioutil.TempDir("", "status")
 	c.Assert(err, IsNil)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	fs := osfs.New(filepath.Join(dir, "worktree"))
 	w := &Worktree{
@@ -1289,7 +1288,7 @@ func (s *WorktreeSuite) TestAddRemoved(c *C) {
 func (s *WorktreeSuite) TestAddSymlink(c *C) {
 	dir, err := ioutil.TempDir("", "checkout")
 	c.Assert(err, IsNil)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	r, err := PlainInit(dir, false)
 	c.Assert(err, IsNil)
@@ -1975,7 +1974,7 @@ func (s *WorktreeSuite) TestGrep(c *C) {
 func (s *WorktreeSuite) TestAddAndCommit(c *C) {
 	dir, err := ioutil.TempDir("", "plain-repo")
 	c.Assert(err, IsNil)
-	//defer os.RemoveAll(dir)
+	defer os.RemoveAll(dir)
 
 	repo, err := PlainInit(dir, false)
 	c.Assert(err, IsNil)
@@ -2006,80 +2005,4 @@ func (s *WorktreeSuite) TestAddAndCommit(c *C) {
 		return err
 	})
 	c.Assert(err, IsNil)
-}
-
-func (s *WorktreeSuite) TestLinkedWorktree(c *C) {
-	fs := fixtures.ByTag("linked-worktree").One().Worktree()
-
-	// Open main repo.
-	{
-		fmt.Printf("-- TestLinkedWorktree fs.Root=%s\n", fs.Root())
-		fs, err := fs.Chroot("main")
-		c.Assert(err, IsNil)
-		repo, err := PlainOpen(fs.Root())
-		c.Assert(err, IsNil)
-
-		wt, err := repo.Worktree()
-		c.Assert(err, IsNil)
-
-		status, err := wt.Status()
-		c.Assert(err, IsNil)
-		c.Assert(len(status), Equals, 2) // 2 files
-
-		head, err := repo.Head()
-		c.Assert(err, IsNil)
-		c.Assert(string(head.Name()), Equals, "refs/heads/master")
-	}
-
-	// Open linked-worktree #1.
-	{
-		fs, err := fs.Chroot("linked-worktree-1")
-		c.Assert(err, IsNil)
-		repo, err := PlainOpen(fs.Root())
-		c.Assert(err, IsNil)
-
-		wt, err := repo.Worktree()
-		c.Assert(err, IsNil)
-
-		status, err := wt.Status()
-		c.Assert(err, IsNil)
-		c.Assert(len(status), Equals, 3) // 3 files
-
-		_, ok := status["linked-worktree-1-unique-file.txt"]
-		c.Assert(ok, Equals, true)
-
-		head, err := repo.Head()
-		c.Assert(err, IsNil)
-		c.Assert(string(head.Name()), Equals, "refs/heads/linked-worktree-1")
-	}
-
-	// Open linked-worktree #2.
-	{
-		fs, err := fs.Chroot("linked-worktree-2")
-		c.Assert(err, IsNil)
-		repo, err := PlainOpen(fs.Root())
-		c.Assert(err, IsNil)
-
-		wt, err := repo.Worktree()
-		c.Assert(err, IsNil)
-
-		status, err := wt.Status()
-		c.Assert(err, IsNil)
-		c.Assert(len(status), Equals, 3) // 3 files
-
-		_, ok := status["linked-worktree-2-unique-file.txt"]
-		c.Assert(ok, Equals, true)
-
-		head, err := repo.Head()
-		c.Assert(err, IsNil)
-		c.Assert(string(head.Name()), Equals, "refs/heads/branch-with-different-name")
-	}
-
-	// Open linked-worktree #2.
-	{
-		fs, err := fs.Chroot("linked-worktree-invalid-commondir")
-		c.Assert(err, IsNil)
-		_, err = PlainOpen(fs.Root())
-		c.Assert(err, Equals, ErrRepositoryIncomplete)
-	}
 }
