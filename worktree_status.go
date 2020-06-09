@@ -51,7 +51,7 @@ func (w *Worktree) status(commit plumbing.Hash) (Status, error) {
 
 	left, err := w.diffCommitWithStaging(commit, false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("diffCommitWithStaging %s error: %s", commit, err)
 	}
 
 	for _, ch := range left {
@@ -206,7 +206,7 @@ func (w *Worktree) diffCommitWithStaging(commit plumbing.Hash, reverse bool) (me
 	if !commit.IsZero() {
 		c, err := w.r.CommitObject(commit)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("CommitObject error: %s", err)
 		}
 
 		t, err = c.Tree()

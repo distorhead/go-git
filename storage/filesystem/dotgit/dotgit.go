@@ -30,6 +30,12 @@ const (
 	objectsPath    = "objects"
 	packPath       = "pack"
 	refsPath       = "refs"
+	branchesPath   = "branches"
+	hooksPath      = "hooks"
+	infoPath       = "info"
+	remotesPath    = "remotes"
+	logsPath       = "logs"
+	worktreesPath  = "worktrees"
 
 	tmpPackedRefsPrefix = "._packed-refs"
 
@@ -70,17 +76,18 @@ type Options struct {
 	// KeepDescriptors makes the file descriptors to be reused but they will
 	// need to be manually closed calling Close().
 	KeepDescriptors bool
-	// CommonFs sets the directory used for accessing non-worktree files that
-	// would normally be taken from the root directory.
-	CommonFs billy.Filesystem
+	// CommonRepositoryFs used to access repository pointed by commondir file
+	// (according to git scm layout: https://git-scm.com/docs/gitrepository-layout#Documentation/gitrepository-layout.txt)
+	CommonRepositoryFs billy.Filesystem
 }
 
 // The DotGit type represents a local git repository on disk. This
 // type is not zero-value-safe, use the New function to initialize it.
 type DotGit struct {
-	options  Options
-	fs       billy.Filesystem
-	commonfs billy.Filesystem
+	options Options
+
+	repositoryFs       billy.Filesystem
+	commonRepositoryFs billy.Filesystem
 
 	// incoming object directory information
 	incomingChecked bool
@@ -97,31 +104,31 @@ type DotGit struct {
 // New returns a DotGit value ready to be used. The path argument must
 // be the absolute path of a git repository directory (e.g.
 // "/foo/bar/.git").
-func New(fs billy.Filesystem) *DotGit {
-	return NewWithOptions(fs, Options{})
+func New(repositoryFs billy.Filesystem) *DotGit {
+	return NewWithOptions(repositoryFs, Options{})
 }
 
 // NewWithOptions sets non default configuration options.
 // See New for complete help.
 func NewWithOptions(fs billy.Filesystem, o Options) *DotGit {
 	return &DotGit{
-		options:  o,
-		fs:       fs,
-		commonfs: o.CommonFs,
+		options:            o,
+		repositoryFs:       fs,
+		commonRepositoryFs: o.CommonRepositoryFs,
 	}
 }
 
 // Initialize creates all the folder scaffolding.
 func (d *DotGit) Initialize() error {
-	mustExists := []string{
-		d.fs.Join("objects", "info"),
-		d.fs.Join("objects", "pack"),
-		d.fs.Join("refs", "heads"),
-		d.fs.Join("refs", "tags"),
+	mustExists := map[billy.Filesystem]string{
+		d.mapRepositoryFsByPath(objectsPath, "info"): d.repositoryFs.Join(objectsPath, "info"),
+		d.mapRepositoryFsByPath(objectsPath, "pack"): d.repositoryFs.Join(objectsPath, "pack"),
+		d.mapRepositoryFsByPath(refsPath, "heads"):   d.repositoryFs.Join(refsPath, "heads"),
+		d.mapRepositoryFsByPath(refsPath, "tags"):    d.repositoryFs.Join(refsPath, "tags"),
 	}
 
-	for _, path := range mustExists {
-		_, err := d.fs.Stat(path)
+	for fs, path := range mustExists {
+		_, err := fs.Stat(path)
 		if err == nil {
 			continue
 		}
@@ -130,7 +137,7 @@ func (d *DotGit) Initialize() error {
 			return err
 		}
 
-		if err := d.fs.MkdirAll(path, os.ModeDir|os.ModePerm); err != nil {
+		if err := fs.MkdirAll(path, os.ModeDir|os.ModePerm); err != nil {
 			return err
 		}
 	}
@@ -162,39 +169,32 @@ func (d *DotGit) Close() error {
 
 // ConfigWriter returns a file pointer for write to the config file
 func (d *DotGit) ConfigWriter() (billy.File, error) {
-	return d.fs.Create(configPath)
+	return d.mapRepositoryFsByPath(configPath).Create(configPath)
 }
 
 // Config returns a file pointer for read to the config file
 func (d *DotGit) Config() (billy.File, error) {
-	if d.commonfs != nil {
-		if _, err := d.fs.Stat(configPath); os.IsNotExist(err) {
-			return d.commonfs.Open(configPath)
-		} else if err != nil {
-			return nil, fmt.Errorf("error accessing %s: %s", d.fs.Join(d.fs.Root(), configPath), err)
-		}
-	}
-	return d.fs.Open(configPath)
+	return d.mapRepositoryFsByPath(configPath).Open(configPath)
 }
 
 // IndexWriter returns a file pointer for write to the index file
 func (d *DotGit) IndexWriter() (billy.File, error) {
-	return d.fs.Create(indexPath)
+	return d.mapRepositoryFsByPath(indexPath).Create(indexPath)
 }
 
 // Index returns a file pointer for read to the index file
 func (d *DotGit) Index() (billy.File, error) {
-	return d.fs.Open(indexPath)
+	return d.mapRepositoryFsByPath(indexPath).Open(indexPath)
 }
 
 // ShallowWriter returns a file pointer for write to the shallow file
 func (d *DotGit) ShallowWriter() (billy.File, error) {
-	return d.fs.Create(shallowPath)
+	return d.mapRepositoryFsByPath(shallowPath).Create(shallowPath)
 }
 
 // Shallow returns a file pointer for read to the shallow file
 func (d *DotGit) Shallow() (billy.File, error) {
-	f, err := d.fs.Open(shallowPath)
+	f, err := d.mapRepositoryFsByPath(shallowPath).Open(shallowPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -210,7 +210,7 @@ func (d *DotGit) Shallow() (billy.File, error) {
 // disk and also generates and save the index for the given packfile.
 func (d *DotGit) NewObjectPack() (*PackWriter, error) {
 	d.cleanPackList()
-	return newPackWrite(d.fs)
+	return newPackWrite(d.mapRepositoryFsByPath(objectsPath, packPath))
 }
 
 // ObjectPacks returns the list of availables packfiles
@@ -227,31 +227,36 @@ func (d *DotGit) ObjectPacks() ([]plumbing.Hash, error) {
 	return d.packList, nil
 }
 
-func (d *DotGit) getFsByPathExistence(elem ...string) (billy.Filesystem, error) {
-	if d.commonfs == nil {
-		return d.fs, nil
+// mapRepositoryFsByPath returns git repository root directory which conforms with the official git scm layout by given path inside git config directory:
+// https://git-scm.com/docs/gitrepository-layout#Documentation/gitrepository-layout.txt
+// Note that some dirs (objects dir for example) should be taken from commondir (or GIT_COMMON_DIR) if commondir exists.
+func (d *DotGit) mapRepositoryFsByPath(pathElem ...string) billy.Filesystem {
+	// Nothing to decide if commondir not used
+	if d.commonRepositoryFs == nil {
+		return d.repositoryFs
 	}
 
-	if _, err := d.fs.Stat(d.fs.Join(elem...)); os.IsNotExist(err) {
-		if _, err := d.commonfs.Stat(d.commonfs.Join(elem...)); os.IsNotExist(err) {
-			return d.fs, nil
-		} else if err != nil {
-			return nil, fmt.Errorf("error accessing %s: %s", d.commonfs.Join(append([]string{d.commonfs.Root()}, elem...)...), err)
-		} else {
-			return d.commonfs, nil
-		}
-	} else if err != nil {
-		return nil, fmt.Errorf("error accessing %s: %s", d.fs.Join(append([]string{d.fs.Root()}, elem...)...), err)
-	} else {
-		return d.fs, nil
+	// Check exceptions for commondir (https://git-scm.com/docs/gitrepository-layout#Documentation/gitrepository-layout.txt)
+	path := d.repositoryFs.Join(pathElem...)
+	switch path {
+	case d.repositoryFs.Join(logsPath, "HEAD"):
+		return d.repositoryFs
+	case d.repositoryFs.Join(refsPath, "bisect"), d.repositoryFs.Join(refsPath, "rewritten"), d.repositoryFs.Join(refsPath, "worktree"):
+		return d.repositoryFs
+	}
+
+	// Determine dot-git config root by first path element
+	switch pathElem[0] {
+	case objectsPath, refsPath, packedRefsPath, configPath, branchesPath, hooksPath, infoPath, remotesPath, logsPath, shallowPath, worktreesPath:
+		// https://git-scm.com/docs/gitrepository-layout#Documentation/gitrepository-layout.txt
+		return d.commonRepositoryFs
+	default:
+		return d.repositoryFs
 	}
 }
 
 func (d *DotGit) objectPacks() ([]plumbing.Hash, error) {
-	fs, err := d.getFsByPathExistence(objectsPath)
-	if err != nil {
-		return nil, err
-	}
+	fs := d.mapRepositoryFsByPath(objectsPath, packPath)
 
 	files, err := fs.ReadDir(fs.Join(objectsPath, packPath))
 	if os.IsNotExist(err) {
@@ -1084,14 +1089,23 @@ func (d *DotGit) PackRefs() (err error) {
 
 // Module return a billy.Filesystem pointing to the module folder
 func (d *DotGit) Module(name string) (billy.Filesystem, error) {
-	return d.fs.Chroot(d.fs.Join(modulePath, name))
+	fs, err := d.getFsByPathExistence(modulePath)
+	if err != nil {
+		return nil, err
+	}
+	return fs.Chroot(fs.Join(modulePath, name))
 }
 
 // Alternates returns DotGit(s) based off paths in objects/info/alternates if
 // available. This can be used to checks if it's a shared repository.
 func (d *DotGit) Alternates() ([]*DotGit, error) {
-	altpath := d.fs.Join("objects", "info", "alternates")
-	f, err := d.fs.Open(altpath)
+	fs, err := d.getFsByPathExistence(objectsPath)
+	if err != nil {
+		return nil, err
+	}
+
+	altpath := fs.Join(objectsPath, "info", "alternates")
+	f, err := fs.Open(altpath)
 	if err != nil {
 		return nil, err
 	}
@@ -1115,10 +1129,9 @@ func (d *DotGit) Alternates() ([]*DotGit, error) {
 			// Remove the first ../
 			relpath := filepath.Join(strings.Split(slashPath, "/")[1:]...)
 			normalPath := filepath.FromSlash(relpath)
-			path = filepath.Join(d.fs.Root(), normalPath)
+			path = filepath.Join(fs.Root(), normalPath)
 		}
-		fs := osfs.New(filepath.Dir(path))
-		alternates = append(alternates, NewWithOptions(fs, d.options))
+		alternates = append(alternates, NewWithOptions(osfs.New(filepath.Dir(path)), d.options))
 	}
 
 	if err = scanner.Err(); err != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -208,7 +209,7 @@ func (s *WorktreeSuite) TestPullProgressWithRecursion(c *C) {
 
 	dir, err := ioutil.TempDir("", "plain-clone-submodule")
 	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	r, _ := PlainInit(dir, false)
 	r.CreateRemote(&config.RemoteConfig{
@@ -361,7 +362,7 @@ func (s *WorktreeSuite) TestCheckoutSymlink(c *C) {
 
 	dir, err := ioutil.TempDir("", "checkout")
 	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	r, err := PlainInit(dir, false)
 	c.Assert(err, IsNil)
@@ -529,7 +530,7 @@ func (s *WorktreeSuite) TestCheckoutIndexMem(c *C) {
 func (s *WorktreeSuite) TestCheckoutIndexOS(c *C) {
 	dir, err := ioutil.TempDir("", "checkout")
 	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	fs := osfs.New(filepath.Join(dir, "worktree"))
 	w := &Worktree{
@@ -954,7 +955,7 @@ func (s *WorktreeSuite) TestStatusAfterCheckout(c *C) {
 func (s *WorktreeSuite) TestStatusModified(c *C) {
 	dir, err := ioutil.TempDir("", "status")
 	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	fs := osfs.New(filepath.Join(dir, "worktree"))
 	w := &Worktree{
@@ -1048,7 +1049,7 @@ func (s *WorktreeSuite) TestStatusUntracked(c *C) {
 func (s *WorktreeSuite) TestStatusDeleted(c *C) {
 	dir, err := ioutil.TempDir("", "status")
 	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	fs := osfs.New(filepath.Join(dir, "worktree"))
 	w := &Worktree{
@@ -1288,7 +1289,7 @@ func (s *WorktreeSuite) TestAddRemoved(c *C) {
 func (s *WorktreeSuite) TestAddSymlink(c *C) {
 	dir, err := ioutil.TempDir("", "checkout")
 	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	r, err := PlainInit(dir, false)
 	c.Assert(err, IsNil)
@@ -1974,7 +1975,7 @@ func (s *WorktreeSuite) TestGrep(c *C) {
 func (s *WorktreeSuite) TestAddAndCommit(c *C) {
 	dir, err := ioutil.TempDir("", "plain-repo")
 	c.Assert(err, IsNil)
-	defer os.RemoveAll(dir)
+	//defer os.RemoveAll(dir)
 
 	repo, err := PlainInit(dir, false)
 	c.Assert(err, IsNil)
@@ -2012,6 +2013,7 @@ func (s *WorktreeSuite) TestLinkedWorktree(c *C) {
 
 	// Open main repo.
 	{
+		fmt.Printf("-- TestLinkedWorktree fs.Root=%s\n", fs.Root())
 		fs, err := fs.Chroot("main")
 		c.Assert(err, IsNil)
 		repo, err := PlainOpen(fs.Root())
