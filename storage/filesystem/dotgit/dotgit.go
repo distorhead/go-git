@@ -970,8 +970,12 @@ func (d *DotGit) addRefFromHEAD(refs *[]*plumbing.Reference) error {
 }
 
 func (d *DotGit) readReferenceFile(path, name string) (ref *plumbing.Reference, err error) {
-	path = d.fs.Join(path, d.fs.Join(strings.Split(name, "/")...))
-	st, err := d.fs.Stat(path)
+	fs, err := d.getFsByPathExistence(path, name)
+	if err != nil {
+		return nil, err
+	}
+
+	st, err := fs.Stat(fs.Join(path, name))
 	if err != nil {
 		return nil, err
 	}
@@ -979,22 +983,13 @@ func (d *DotGit) readReferenceFile(path, name string) (ref *plumbing.Reference, 
 		return nil, ErrIsDir
 	}
 
-	f, err := d.fsFromRefPath(path).Open(path)
+	f, err := fs.Open(fs.Join(path, name))
 	if err != nil {
 		return nil, err
 	}
 	defer ioutil.CheckClose(f, &err)
 
 	return d.readReferenceFrom(f, name)
-}
-
-func (d *DotGit) fsFromRefPath(path string) billy.Filesystem {
-	// In general, all pseudo refs are per working tree and all refs starting
-	// with "refs/" are shared.
-	if d.commonfs != nil && strings.HasPrefix(path, "refs/") {
-		return d.commonfs
-	}
-	return d.fs
 }
 
 func (d *DotGit) CountLooseRefs() (int, error) {

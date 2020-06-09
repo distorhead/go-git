@@ -25,7 +25,12 @@ func (d *DotGit) setRefRwfs(fileName, content string, old *plumbing.Reference) (
 		mode |= os.O_TRUNC
 	}
 
-	f, err := d.fsFromRefPath(fileName).OpenFile(fileName, mode, 0666)
+	fs, err := d.getFsByPathExistence(fileName)
+	if err != nil {
+		return err
+	}
+
+	f, err := fs.OpenFile(fileName, mode, 0666)
 	if err != nil {
 		return err
 	}
@@ -59,9 +64,12 @@ func (d *DotGit) setRefRwfs(fileName, content string, old *plumbing.Reference) (
 // making it compatible with these simple filesystems. This is usually not
 // a problem as they should be accessed by only one process at a time.
 func (d *DotGit) setRefNorwfs(fileName, content string, old *plumbing.Reference) error {
-	fs := d.fsFromRefPath(fileName)
+	fs, err := d.getFsByPathExistence(fileName)
+	if err != nil {
+		return err
+	}
 
-	_, err := fs.Stat(fileName)
+	_, err = fs.Stat(fileName)
 	if err == nil && old != nil {
 		fRead, err := fs.Open(fileName)
 		if err != nil {
