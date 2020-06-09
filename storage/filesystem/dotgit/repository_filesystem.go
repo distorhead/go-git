@@ -16,6 +16,13 @@ type RepositoryFilesystem struct {
 	commonDotGitFs billy.Filesystem
 }
 
+func NewRepositoryFilesystem(dotGitFs, commonDotGitFs billy.Filesystem) *RepositoryFilesystem {
+	return &RepositoryFilesystem{
+		dotGitFs:       dotGitFs,
+		commonDotGitFs: commonDotGitFs,
+	}
+}
+
 func (fs *RepositoryFilesystem) mapToRepositoryFsByPath(path string) billy.Filesystem {
 	// Nothing to decide if commondir not defined
 	if fs.commonDotGitFs == nil {
